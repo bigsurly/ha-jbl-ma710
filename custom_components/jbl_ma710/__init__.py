@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from datetime import timedelta
+from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
@@ -15,23 +17,68 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "jbl_ma710"
 PLATFORMS = [Platform.MEDIA_PLAYER]
-
-# Poll is a safety-net / reconnect heartbeat only.
-# All real-time updates come via push_callback from the background reader.
 UPDATE_INTERVAL = timedelta(seconds=30)
+
+CARD_FILENAME = "jbl-ma710-card.js"
+CARD_DEST_DIR = "www/community/jbl-ma710-card"
+LOVELACE_RESOURCE_URL = "/local/community/jbl-ma710-card/jbl-ma710-card.js"
+
+
+async def _async_install_card(hass: HomeAssistant) -> None:
+    """Copy the Lovelace card JS into www and register it as a Lovelace resource."""
+    # The www folder lives two levels up from this file inside the repo
+    src = Path(__file__).parent.parent.parent / "www" / CARD_FILENAME
+    if not src.exists():
+        _LOGGER.warning("JBL MA710: card source not found at %s — skipping auto-install", src)
+        return
+
+    dest_dir = Path(hass.config.path(CARD_DEST_DIR))
+    dest = dest_dir / CARD_FILENAME
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    await hass.async_add_executor_job(shutil.copy2, str(src), str(dest))
+    _LOGGER.debug("JBL MA710: card copied to %s", dest)
+
+    # Register as a Lovelace resource if not already present
+    try:
+        resources = hass.data.get("lovelace", {}).get("resources")
+        if resources and hasattr(resources, "async_items"):
+            existing = [r["url"] for r in resources.async_items()]
+            if LOVELACE_RESOURCE_URL not in existing:
+                await resources.async_create_item({
+                    "res_type": "module",
+                    "url": LOVELACE_RESOURCE_URL,
+                })
+                _LOGGER.info(
+                    "JBL MA710: Lovelace resource registered — %s",
+                    LOVELACE_RESOURCE_URL,
+                )
+        else:
+            _LOGGER.info(
+                "JBL MA710: card copied but could not auto-register resource. "
+                "Add manually: Settings → Dashboards → Resources → %s (JavaScript Module)",
+                LOVELACE_RESOURCE_URL,
+            )
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning(
+            "JBL MA710: card copied but resource registration failed (%s). "
+            "Add manually: Settings → Dashboards → Resources → %s (JavaScript Module)",
+            exc,
+            LOVELACE_RESOURCE_URL,
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    await _async_install_card(hass)
+
     host = entry.data[CONF_HOST]
     port = entry.data.get(CONF_PORT, 50000)
 
     client = JBLClient(host, port)
     coordinator = JBLCoordinator(hass, client)
 
-    # Wire push callback BEFORE connecting so we catch early frames
     client.push_callback = coordinator.async_push_update
 
-    # Try initial connect; failure is non-fatal (AVR might be in standby)
     if not await client.connect():
         _LOGGER.warning("JBL MA710: initial connect failed (AVR in standby?)")
 
@@ -46,20 +93,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register bass/treble EQ services
     async def handle_set_bass(call):
-        entity_id = call.data.get("entity_id")
         db = int(call.data.get("bass", 0))
-        for eid, data in hass.data[DOMAIN].items():
-            if data["client"].host in entity_id:
-                await data["client"].set_bass(db)
-                data["coordinator"].async_set_updated_data(dict(data["client"].state))
+        for data in hass.data[DOMAIN].values():
+            await data["client"].set_bass(db)
+            data["coordinator"].async_set_updated_data(dict(data["client"].state))
 
     async def handle_set_treble(call):
-        entity_id = call.data.get("entity_id")
         db = int(call.data.get("treble", 0))
-        for eid, data in hass.data[DOMAIN].items():
-            if data["client"].host in entity_id:
-                await data["client"].set_treble(db)
-                data["coordinator"].async_set_updated_data(dict(data["client"].state))
+        for data in hass.data[DOMAIN].values():
+            await data["client"].set_treble(db)
+            data["coordinator"].async_set_updated_data(dict(data["client"].state))
 
     hass.services.async_register(DOMAIN, "set_bass",   handle_set_bass)
     hass.services.async_register(DOMAIN, "set_treble", handle_set_treble)
@@ -95,27 +138,16 @@ class JBLCoordinator(DataUpdateCoordinator):
         self.client = client
 
     def async_push_update(self, state: dict) -> None:
-        """
-        Called by the client immediately on any pushed state change.
-        async_set_updated_data() updates self.data and fires all listeners
-        synchronously on the HA event loop — no poll timer delay.
-        """
         _LOGGER.debug("JBL MA710: push update → %s", state)
         self.async_set_updated_data(state)
 
     async def _async_update_data(self) -> dict:
-        """
-        Scheduled poll. Attempts reconnect if disconnected.
-        Never raises UpdateFailed for a powered-off AVR — we preserve
-        the cached state so HA shows 'off' rather than 'unavailable'.
-        """
         try:
             state = await self.client.poll_state()
         except Exception as exc:
             _LOGGER.warning("JBL MA710: poll error: %s", exc)
             state = dict(self.client.state)
 
-        # Only fail hard if we have literally never gotten any data at all
         if state.get("power") is None and all(v is None for v in state.values()):
             raise UpdateFailed("JBL MA710 unreachable and no cached state")
 
