@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JBL MA710 Card — Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  body { background:#13151a; display:flex; flex-direction:column; align-items:center; padding:32px 16px; font-family:sans-serif; gap:12px; }
+  .lbl { color:#444; font-size:11px; letter-spacing:2px; text-transform:uppercase; }
+  #mount { width:100%; max-width:420px; }
+</style>
+</head>
+<body>
+<div class="lbl">JBL MA710 — Card Preview (interactive)</div>
+<div id="mount"></div>
+<script>
+const SOURCES=["TV (ARC)","HDMI 1","HDMI 2","HDMI 3","HDMI 4","HDMI 5","HDMI 6","Coax","Optical","Analog 1","Analog 2","Phono","Bluetooth","Network"];
+const MODES=["Native","Stereo 2.0","Stereo 2.1","All Stereo","Dolby Surround","DTS Neural:X"];
+const SRC_ICONS={"TV (ARC)":"📺","HDMI 1":"🔌","HDMI 2":"🔌","HDMI 3":"🔌","HDMI 4":"🔌","HDMI 5":"🔌","HDMI 6":"🔌","Coax":"🔗","Optical":"💡","Analog 1":"🎵","Analog 2":"🎵","Phono":"🎶","Bluetooth":"📡","Network":"🌐"};
+const STREAM_ICONS={"Spotify":"🎧","AirPlay":"📱","Google Cast":"📺","Tidal":"🌊","Bluetooth":"📡","TuneIn":"📻","Roon":"🎼","Amazon Music":"📦","Deezer":"🎵","Qobuz":"🎻","Pandora":"🌸"};
+const ARC_R=44, ARC_CIRC=2*Math.PI*ARC_R*(270/360);
+
+let S={power:false,volume:45,muted:false,source:"HDMI 1",mode:"Native",bass:0,treble:2,stream:null,streamState:null};
+// Simulate streaming when on Network
+let volDrag=false,volStartY=0,volStartV=0;
+let eqDrag=null,eqStartX=0,eqStartDb=0;
+
+function pct(v,min,max){return((v-min)/(max-min)*100).toFixed(1);}
+function arcOff(){return(ARC_CIRC*(1-S.volume/99)).toFixed(2);}
+function eqThumb(db){return((db+12)/24*100).toFixed(1);}
+function eqPosStyle(db){return db>=0?`left:50%;right:${(50-db/12*50).toFixed(1)}%`:`left:50%;right:50%`;}
+function eqNegStyle(db){return db<0?`right:50%;left:${(50+db/12*50).toFixed(1)}%`:`left:50%;right:50%`;}
+function eqValClass(db){return db>0?'pos':db<0?'neg':'';}
+function fmtDb(db){return db>0?`+${db}`:String(db);}
+const fillC=(m)=>m?'#444750':'#e8a020';
+const fillF=(m)=>m?'none':'drop-shadow(0 0 4px #e8a02080)';
+
+function render(){
+  const on=S.power,m=S.muted,v=S.volume,b=S.bass,t=S.treble;
+  const svc=S.stream,sst=S.streamState;
+  const showStream=on&&svc&&sst&&sst!=='stopped';
+
+  document.getElementById("mount").innerHTML=`
+  <div style="background:#0e0f11;border:1px solid #2a2d32;border-radius:18px;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#d8dce4;user-select:none;box-shadow:0 0 0 1px #ffffff06 inset,0 12px 48px #00000090">
+
+    <!-- header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 12px;background:linear-gradient(180deg,#1b1d21,#0e0f11);border-bottom:1px solid #2a2d32">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;border-radius:8px;background:#e8a020;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#000;box-shadow:0 0 16px #e8a02050">JBL</div>
+        <div>
+          <div style="font-size:18px;font-weight:700;letter-spacing:1px;line-height:1">MA710</div>
+          <div style="font-size:10px;color:#5a5f6b;letter-spacing:2.5px;text-transform:uppercase;margin-top:2px">A/V Receiver</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 13px;border-radius:20px;border:1px solid ${on?'#4fc97a28':'#2a2d32'};background:#161719;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:1px">
+        <div style="width:7px;height:7px;border-radius:50%;background:${on?'#4fc97a':'#3a3d44'};${on?'box-shadow:0 0 6px #4fc97a':''}"></div>
+        <span style="color:${on?'#4fc97a':'#5a5f6b'}">${on?'ONLINE':'STANDBY'}</span>
+      </div>
+    </div>
+
+    <!-- volume zone -->
+    <div style="padding:24px 24px 20px;background:linear-gradient(180deg,#131517,#0e0f11);border-bottom:1px solid #2a2d32">
+      <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#5a5f6b;text-align:center;margin-bottom:20px">Volume</div>
+      <div style="display:grid;grid-template-columns:76px 1fr 76px;align-items:center;gap:12px">
+        <div onclick="adjVol(-2)" style="width:64px;height:64px;border-radius:14px;border:1px solid #2a2d32;background:#161719;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;${!on?'opacity:.3;pointer-events:none':''}">
+          <span style="font-size:26px;font-weight:300;line-height:1;color:#5a5f6b;font-family:'Rajdhani',sans-serif">−</span>
+          <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#3a3d44">Down</span>
+        </div>
+        <div style="position:relative;width:160px;height:160px;margin:0 auto">
+          <svg style="width:100%;height:100%;transform:rotate(-135deg);filter:drop-shadow(0 0 12px #00000090)" viewBox="0 0 110 110">
+            <circle fill="none" stroke="#1e2126" stroke-width="8" stroke-linecap="round" cx="55" cy="55" r="${ARC_R}" stroke-dasharray="${ARC_CIRC.toFixed(2)}" stroke-dashoffset="0"/>
+            <circle fill="none" stroke="${fillC(m)}" stroke-width="8" stroke-linecap="round" cx="55" cy="55" r="${ARC_R}" stroke-dasharray="${ARC_CIRC.toFixed(2)}" stroke-dashoffset="${arcOff()}" style="filter:${fillF(m)}"/>
+          </svg>
+          <div id="volknob" style="position:absolute;inset:22px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#252830,#14161a);border:1px solid #2e3138;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:${on?'ns-resize':'default'};box-shadow:0 6px 20px #00000080,0 0 0 1px #ffffff06 inset;gap:2px;${!on?'opacity:.35;pointer-events:none':''}">
+            <div id="voln" style="font-family:'Share Tech Mono',monospace;font-size:42px;line-height:1;color:${m?'#3a3d44':'#d8dce4'};letter-spacing:-1px">${v}</div>
+            <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#5a5f6b;margin-top:-2px">Volume</div>
+          </div>
+        </div>
+        <div onclick="adjVol(2)" style="width:64px;height:64px;border-radius:14px;border:1px solid #2a2d32;background:#161719;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;${!on?'opacity:.3;pointer-events:none':''}">
+          <span style="font-size:26px;font-weight:300;line-height:1;color:#5a5f6b;font-family:'Rajdhani',sans-serif">+</span>
+          <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#3a3d44">Up</span>
+        </div>
+      </div>
+      <!-- slider -->
+      <div style="display:flex;align-items:center;gap:10px;margin-top:18px">
+        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#5a5f6b;width:18px;text-align:center">0</span>
+        <div id="voltrack" onclick="sliderClick(event)" style="flex:1;height:6px;border-radius:3px;background:#1e2024;border:1px solid #2a2d32;position:relative;cursor:${on?'pointer':'default'};${!on?'opacity:.3;pointer-events:none':''}">
+          <div style="height:100%;border-radius:3px;width:${pct(v,0,99)}%;background:${m?'#3a3d44':'linear-gradient(90deg,#c97800,#e8a020)'};position:relative">
+            <div style="position:absolute;right:-6px;top:50%;width:14px;height:14px;border-radius:50%;background:${m?'#3a3d44':'#e8a020'};border:2px solid #0e0f11;transform:translateY(-50%);${m?'':'box-shadow:0 0 8px #e8a02060'}"></div>
+          </div>
+        </div>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#5a5f6b;width:18px;text-align:center">99</span>
+      </div>
+      <!-- mute -->
+      <div style="display:flex;justify-content:center;margin-top:14px">
+        <button onclick="if(S.power){S.muted=!S.muted;render()}" style="display:flex;align-items:center;gap:8px;padding:9px 24px;border-radius:10px;border:1px solid ${m?'#e8a020':'#2a2d32'};background:${m?'#e8a02012':'#161719'};cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:${m?'#e8a020':'#5a5f6b'};${m?'box-shadow:0 0 12px #e8a02030':''}${!on?';opacity:.3;pointer-events:none':''}">
+          ${m?'🔇':'🔉'} ${m?'Unmute':'Mute'}
+        </button>
+      </div>
+    </div>
+
+    <!-- EQ -->
+    <div style="padding:16px 24px 18px;border-bottom:1px solid #2a2d32;background:#0e0f11">
+      <div style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:#5a5f6b;margin-bottom:14px;display:flex;align-items:center;gap:8px">Equalizer<span style="flex:1;height:1px;background:#2a2d32;display:inline-block"></span></div>
+      ${['treble','bass'].map(w=>{
+        const db=w==='treble'?t:b;
+        return `<div style="display:flex;align-items:center;gap:12px;${w==='bass'?'margin-top:12px':''}">
+          <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#5a5f6b;width:44px;flex-shrink:0;font-family:'Rajdhani',sans-serif">${w}</span>
+          <div id="${w}track" onclick="${w}Click(event)" style="flex:1;height:4px;border-radius:2px;background:#1e2024;border:1px solid #2a2d32;position:relative;cursor:${on?'pointer':'default'};${!on?'opacity:.3;pointer-events:none':''}">
+            <div style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#2a2d32;left:50%;transform:translateX(-50%);border-radius:1px"></div>
+            <div style="position:absolute;top:0;bottom:0;border-radius:2px;background:${db>=0?'#e8a020':'transparent'};${eqPosStyle(db)}"></div>
+            <div style="position:absolute;top:0;bottom:0;border-radius:2px;background:${db<0?'#5a8fff':'transparent'};${eqNegStyle(db)}"></div>
+            <div id="${w}thumb" style="position:absolute;top:50%;width:14px;height:14px;border-radius:50%;background:#d8dce4;border:2px solid #0e0f11;transform:translate(-50%,-50%);box-shadow:0 0 6px #00000080;cursor:ew-resize;left:${eqThumb(db)}%"></div>
+          </div>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${db>0?'#e8a020':db<0?'#5a8fff':'#5a5f6b'};width:32px;text-align:right;flex-shrink:0">${fmtDb(db)}</span>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- power -->
+    <div style="display:flex;justify-content:center;padding:16px 24px 4px">
+      <button onclick="S.power=!S.power;if(S.power&&S.source==='Network'){S.stream='Spotify';S.streamState='playing';}else if(!S.power){S.stream=null;S.streamState=null;}render()" style="flex:1;max-width:200px;height:48px;border-radius:12px;border:1px solid ${on?'#e0505040':'#2a2d32'};background:${on?'#e0505008':'#161719'};cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:${on?'#e05050':'#5a5f6b'};${on?'box-shadow:0 0 16px #e0505020':''}">
+        ⏻ ${on?'Turn Off':'Turn On'}
+      </button>
+    </div>
+
+    <div style="height:1px;background:#2a2d32;margin:16px 20px 0"></div>
+
+    <!-- sources -->
+    <div style="padding:14px 20px">
+      <div style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:#5a5f6b;margin-bottom:10px;display:flex;align-items:center;gap:8px">Input Source<span style="flex:1;height:1px;background:#2a2d32;display:inline-block"></span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;${!on?'opacity:.3;pointer-events:none':''}">
+        ${SOURCES.map(s=>`
+          <div onclick="setSource('${s}')" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:10px 4px;border-radius:10px;border:1px solid ${s===S.source?'#e8a020':'#2a2d32'};background:${s===S.source?'#e8a02010':'#161719'};cursor:pointer;min-height:60px">
+            <span style="font-size:18px">${SRC_ICONS[s]||'▶'}</span>
+            <span style="font-size:10px;font-weight:500;color:${s===S.source?'#e8a020':'#5a5f6b'};text-align:center;line-height:1.2">${s}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <div style="height:1px;background:#2a2d32;margin:0 20px"></div>
+
+    <!-- modes -->
+    <div style="padding:14px 20px">
+      <div style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:#5a5f6b;margin-bottom:10px;display:flex;align-items:center;gap:8px">Sound Mode<span style="flex:1;height:1px;background:#2a2d32;display:inline-block"></span></div>
+      <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;${!on?'opacity:.3;pointer-events:none':''}">
+        ${MODES.map(m2=>`
+          <div onclick="S.mode='${m2}';render()" style="flex-shrink:0;padding:7px 14px;border-radius:20px;border:1px solid ${m2===S.mode?'#e8a020':'#2a2d32'};background:${m2===S.mode?'#e8a020':'#161719'};cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:${m2===S.mode?'600':'500'};color:${m2===S.mode?'#000':'#5a5f6b'};white-space:nowrap;${m2===S.mode?'box-shadow:0 0 10px #e8a02050':''}">
+            ${m2}
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- footer -->
+    <div style="padding:10px 20px 14px;border-top:1px solid #2a2d32;background:linear-gradient(0deg,#090a0c,transparent);display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <div style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${on?'#4fc97a':'#3a3d44'};${on?'box-shadow:0 0 4px #4fc97a':''}"></div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${on?'#d8dce4':'#5a5f6b'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${on?(S.source&&S.source!='—'?'▶  '+S.source:'ONLINE'):'STANDBY'}</div>
+        </div>
+        <div style="flex-shrink:0;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;color:#5a5f6b;padding:3px 8px;border:1px solid #2a2d32;border-radius:4px;text-transform:uppercase;background:#161719">${on?S.mode:'—'}</div>
+      </div>
+      ${showStream?`
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:${sst==='playing'?'#e8a02008':'#161719'};border:1px solid ${sst==='playing'?'#e8a02040':'#2a2d32'}">
+        <span style="font-size:16px">${STREAM_ICONS[svc]||'🎵'}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${sst==='playing'?'#d8dce4':'#5a5f6b'};flex:1">${svc}</span>
+        <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;padding:2px 7px;border-radius:10px;color:${sst==='playing'?'#000':'#5a5f6b'};background:${sst==='playing'?'#e8a020':'#1e2024'}">${sst==='playing'?'▶ Playing':'⏸ Paused'}</span>
+      </div>`:''}
+    </div>
+  </div>`;
+
+  bindKnob();
+  bindEq('treble');
+  bindEq('bass');
+}
+
+function bindKnob(){
+  const k=document.getElementById("volknob");
+  if(!k)return;
+  k.addEventListener("mousedown",e=>{if(!S.power)return;volDrag=true;volStartY=e.clientY;volStartV=S.volume;});
+  k.addEventListener("touchstart",e=>{if(!S.power)return;volDrag=true;volStartY=e.touches[0].clientY;volStartV=S.volume;},{passive:true});
+}
+function bindEq(w){
+  const thumb=document.getElementById(w+"thumb");
+  const track=document.getElementById(w+"track");
+  if(!thumb||!track)return;
+  thumb.addEventListener("mousedown",e=>{if(!S.power)return;eqDrag=w;eqStartX=e.clientX;eqStartDb=w==='treble'?S.treble:S.bass;e.stopPropagation();});
+  thumb.addEventListener("touchstart",e=>{if(!S.power)return;eqDrag=w;eqStartX=e.touches[0].clientX;eqStartDb=w==='treble'?S.treble:S.bass;},{passive:true});
+}
+
+function adjVol(d){if(!S.power)return;S.volume=Math.max(0,Math.min(99,S.volume+d));render();}
+function sliderClick(e){if(!S.power)return;const r=e.currentTarget.getBoundingClientRect();S.volume=Math.round(Math.max(0,Math.min(99,((e.clientX-r.left)/r.width)*99)));render();}
+function trebleClick(e){if(!S.power)return;const r=e.currentTarget.getBoundingClientRect();S.treble=Math.round(Math.max(-12,Math.min(12,((e.clientX-r.left)/r.width-0.5)*24)));render();}
+function bassClick(e){if(!S.power)return;const r=e.currentTarget.getBoundingClientRect();S.bass=Math.round(Math.max(-12,Math.min(12,((e.clientX-r.left)/r.width-0.5)*24)));render();}
+function setSource(s){if(!S.power)return;S.source=s;if(s==='Network'){S.stream='Spotify';S.streamState='playing';}else if(s==='Bluetooth'){S.stream='Bluetooth';S.streamState='playing';}else{S.stream=null;S.streamState=null;}render();}
+
+window.addEventListener("mousemove",e=>{
+  if(volDrag){const d=Math.round((volStartY-e.clientY)/1.8);S.volume=Math.max(0,Math.min(99,volStartV+d));const n=document.getElementById("voln");if(n)n.textContent=S.volume;}
+  if(eqDrag){const track=document.getElementById(eqDrag+"track");if(!track)return;const r=track.getBoundingClientRect();const delta=Math.round(((e.clientX-eqStartX)/r.width)*24);const db=Math.max(-12,Math.min(12,eqStartDb+delta));if(eqDrag==='treble')S.treble=db;else S.bass=db;render();}
+});
+window.addEventListener("mouseup",()=>{if(volDrag){volDrag=false;render();}if(eqDrag){eqDrag=null;}});
+window.addEventListener("touchmove",e=>{
+  if(volDrag){const d=Math.round((volStartY-e.touches[0].clientY)/1.8);S.volume=Math.max(0,Math.min(99,volStartV+d));const n=document.getElementById("voln");if(n)n.textContent=S.volume;}
+  if(eqDrag){const track=document.getElementById(eqDrag+"track");if(!track)return;const r=track.getBoundingClientRect();const delta=Math.round(((e.touches[0].clientX-eqStartX)/r.width)*24);const db=Math.max(-12,Math.min(12,eqStartDb+delta));if(eqDrag==='treble')S.treble=db;else S.bass=db;render();}
+},{passive:true});
+window.addEventListener("touchend",()=>{if(volDrag){volDrag=false;render();}if(eqDrag){eqDrag=null;}});
+
+render();
+</script>
+</body>
+</html>

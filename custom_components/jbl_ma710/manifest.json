@@ -1,0 +1,12 @@
+{
+  "domain": "jbl_ma710",
+  "name": "JBL MA710 AVR",
+  "version": "1.0.0",
+  "documentation": "https://github.com/YOUR_USERNAME/ha-jbl-ma710",
+  "issue_tracker": "https://github.com/YOUR_USERNAME/ha-jbl-ma710/issues",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@YOUR_USERNAME"],
+  "iot_class": "local_push",
+  "config_flow": true
+}

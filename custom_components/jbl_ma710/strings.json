@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to JBL MA710",
+        "description": "Enter the IP address of your JBL MA710 AVR.",
+        "data": {
+          "host": "IP Address",
+          "port": "Port (default 50000)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the JBL MA710. Verify the IP address and that the AVR is powered on and connected to the network."
+    },
+    "abort": {
+      "already_configured": "This JBL MA710 is already configured."
+    }
+  }
+}

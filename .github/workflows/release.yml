@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get tag version
+        id: tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create zip for release
+        run: |
+          zip -r jbl_ma710.zip custom_components/jbl_ma710/ www/
+          echo "Created jbl_ma710.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.VERSION }}
+          name: "JBL MA710 ${{ steps.tag.outputs.VERSION }}"
+          body: |
+            ## JBL MA710 AVR Integration ${{ steps.tag.outputs.VERSION }}
+
+            ### Installation via HACS
+            1. In HACS → ⋮ → Custom Repositories
+            2. Add `https://github.com/YOUR_USERNAME/ha-jbl-ma710` as type **Integration**
+            3. Search for "JBL MA710" and install
+            4. Restart Home Assistant
+            5. Add the Lovelace card resource: `/local/community/jbl-ma710-card/jbl-ma710-card.js`
+
+            ### What's included
+            - `custom_components/jbl_ma710/` — HA integration (media_player entity)
+            - `www/jbl-ma710-card.js` — Lovelace remote control card
+          files: jbl_ma710.zip
+          generate_release_notes: true

@@ -1,0 +1,39 @@
+set_bass:
+  name: Set Bass
+  description: Set the bass EQ level on the JBL MA710 (-12 to +12 dB)
+  fields:
+    entity_id:
+      description: The JBL MA710 media player entity
+      required: true
+      selector:
+        entity:
+          domain: media_player
+    bass:
+      description: Bass level in dB (-12 to +12)
+      required: true
+      selector:
+        number:
+          min: -12
+          max: 12
+          step: 1
+          unit_of_measurement: dB
+
+set_treble:
+  name: Set Treble
+  description: Set the treble EQ level on the JBL MA710 (-12 to +12 dB)
+  fields:
+    entity_id:
+      description: The JBL MA710 media player entity
+      required: true
+      selector:
+        entity:
+          domain: media_player
+    treble:
+      description: Treble level in dB (-12 to +12)
+      required: true
+      selector:
+        number:
+          min: -12
+          max: 12
+          step: 1
+          unit_of_measurement: dB
